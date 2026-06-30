@@ -1,0 +1,135 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { DOCUMENTS, PROJECTS, EDITS } from "@/lib/fixtures";
+import type { Edit } from "@/lib/types";
+import { ST, TIER, dmy, isOpenEdit, isOverdue } from "@/lib/domain";
+import { Meta } from "@/components/ui-bits";
+import {
+  ProtectionStrip, ViewSwitcher, shortName, roleOf, TIER_ACCENT, pravkaWord,
+} from "@/components/timeline-shared";
+
+type ClauseGroup = {
+  clause: string;
+  edits: Edit[];          // по дате, новые сверху
+  current: string;        // текущая формулировка в документе
+  origin: string;         // была ли исходная формулировка изменена
+  conflict: boolean;
+  open: number;
+  overdue: boolean;
+  rank: number;           // для сортировки: конфликт → открытые → закрытые
+};
+
+function buildGroups(edits: Edit[]): ClauseGroup[] {
+  const byClause: Record<string, Edit[]> = {};
+  edits.forEach((e) => (byClause[e.clause] ??= []).push(e));
+
+  const groups = Object.entries(byClause).map(([clause, es]) => {
+    const asc = [...es].sort((a, b) => a.date.localeCompare(b.date));
+    const applied = asc.filter((e) => e.status === "applied");
+    const current = applied.length ? applied[applied.length - 1].after : asc[0].before;
+    const open = asc.filter(isOpenEdit).length;
+    const conflict = open > 1;
+    const overdue = asc.some(isOverdue);
+    const rank = conflict ? 0 : open > 0 ? (overdue ? 1 : 2) : 3;
+    return {
+      clause, edits: [...asc].reverse(), current, origin: asc[0].before,
+      conflict, open, overdue, rank,
+    };
+  });
+
+  return groups.sort((a, b) => a.rank - b.rank || a.clause.localeCompare(b.clause));
+}
+
+export function TimelineClausesView({ id }: { id: string }) {
+  const router = useRouter();
+  const doc = DOCUMENTS.find((x) => x.id === id);
+  const edits = EDITS.filter((e) => e.docId === id);
+  if (!doc) return <div className="text-sm text-muted-foreground">Документ не найден.</div>;
+  const proj = PROJECTS.find((p) => p.id === doc.projectId)!;
+  const groups = buildGroups(edits);
+
+  return (
+    <div>
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">{doc.title}</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">{proj.title} · по пунктам договора</p>
+        </div>
+        <button onClick={() => router.push(`/projects/${proj.id}`)} className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-accent">
+          <ArrowLeft className="size-4" />
+          Назад
+        </button>
+      </div>
+
+      <ViewSwitcher docId={id} />
+      <ProtectionStrip edits={edits} />
+
+      <div className="space-y-3">
+        {groups.map((g) => (
+          <div key={g.clause} className={cn("overflow-hidden rounded-lg border", g.conflict && "border-amber-300")}>
+            {/* шапка пункта: название + текущая формулировка + здоровье */}
+            <div className="border-b bg-muted/30 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">{g.clause}</span>
+                {g.conflict ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                    <AlertTriangle className="size-3" /> {g.open} {pravkaWord(g.open)} · конфликт
+                  </span>
+                ) : g.open > 0 ? (
+                  <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    g.overdue ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800")}>
+                    {g.overdue ? <Clock className="size-3" /> : null}
+                    открыто {g.open}{g.overdue ? " · просрочка" : ""}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                    <CheckCircle2 className="size-3" /> закрыт
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-2 text-sm">
+                <span className="shrink-0 text-xs uppercase tracking-wide text-muted-foreground">сейчас:</span>
+                <span className="font-medium text-foreground">{g.current}</span>
+              </div>
+            </div>
+
+            {/* цепочка правок по пункту */}
+            <div className="divide-y">
+              {g.edits.map((e) => {
+                const acc = TIER_ACCENT[e.tier];
+                return (
+                  <div key={e.id} className={cn("flex items-start gap-3 border-l-4 px-4 py-2.5", acc.bar)}>
+                    <span className="mt-0.5 w-20 shrink-0 text-xs text-muted-foreground">{dmy(e.date)}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                        <span className="font-semibold text-foreground">{shortName(e.responsibleId)}</span>
+                        {roleOf(e.responsibleId) && <span className="text-xs text-muted-foreground">({roleOf(e.responsibleId)})</span>}
+                        <span className="text-muted-foreground">→</span>
+                        <span className="text-foreground">{e.after}</span>
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground">{e.argument}</div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Meta m={TIER[e.tier]} className={acc.text} />
+                      <Meta m={ST[e.status]} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {g.conflict && (
+              <div className="flex items-center gap-2 border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+                <AlertTriangle className="size-3.5 shrink-0" />
+                На один пункт настаивают двое — юрист не выбирает в одиночку. Решение — эскалация команде.
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

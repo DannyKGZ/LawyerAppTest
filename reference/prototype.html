@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LawyerApp — прототип</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; color:#18181b; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  ::-webkit-scrollbar{width:10px;height:10px} ::-webkit-scrollbar-thumb{background:#e4e4e7;border-radius:6px}
+</style>
+</head>
+<body class="bg-white text-zinc-900">
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+/* ───────── ИКОНКИ (lucide-стиль, один консистентный набор) ───────── */
+function Ico({name, className='w-4 h-4'}) {
+  const P = {
+    chevronR:<polyline points="9 18 15 12 9 6"/>,
+    chevronD:<polyline points="6 9 12 15 18 9"/>,
+    check:<polyline points="20 6 9 17 4 12"/>,
+    alert:<g><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></g>,
+    upload:<g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></g>,
+    x:<g><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></g>,
+    ext:<g><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></g>,
+    list:<g><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></g>,
+    bot:<g><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="1"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></g>,
+    download:<g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></g>,
+  };
+  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{P[name]}</svg>;
+}
+const Dot = ({c}) => <span className={'inline-block h-1.5 w-1.5 rounded-full shrink-0 '+c} />;
+
+/* ───────── МОК-ДАННЫЕ ───────── */
+const USERS = {
+  assist:{name:'Аня (помощник юриста)'}, lawyer:{name:'Юрист (аутсорс)'}, senior:{name:'Орлов (ст. юрист)'},
+  ivanov:{name:'Иванов'}, petrov:{name:'Петров'}, buh:{name:'Кузьмина (бухгалтер)'}, ceo:{name:'Сидоров (гендир)'},
+};
+const U = id => (USERS[id]||{name:'—'}).name;
+
+const PROJECTS = [
+  { id:'p1', number:12, code:'RMK12', title:'Договор поставки №12', counterparty:'ООО «Ромашка»',
+    managers:['ivanov','petrov'], lawyer:'lawyer', senior:'senior', amount:1200000, currency:'RUB', status:'active', startDate:'2026-05-20', signedAt:'2026-05-30' },
+  { id:'p2', number:7, code:'RMK7', title:'Договор подряда №7', counterparty:'ООО «Ромашка»',
+    managers:['petrov'], lawyer:'lawyer', senior:'senior', amount:480000, currency:'RUB', status:'dispute', startDate:'2026-04-01', signedAt:'2026-04-12' },
+  { id:'p3', number:3, code:'RMK3', title:'Договор аренды №3', counterparty:'ИП Громов',
+    managers:['ivanov'], lawyer:'lawyer', senior:'senior', amount:2400000, currency:'RUB', status:'draft', startDate:'2026-06-05', signedAt:null },
+  { id:'p4', number:15, code:'RMK15', title:'Поставка оборудования №15', counterparty:'АО «ТехноПром»',
+    managers:['ivanov'], lawyer:'lawyer', senior:'senior', amount:54000, currency:'USD', status:'negotiation', startDate:'2026-06-01', signedAt:null },
+  { id:'p5', number:9, code:'RMK9', title:'Лицензионный договор №9', counterparty:'SoftLine GmbH',
+    managers:['petrov'], lawyer:'lawyer', senior:'senior', amount:90000, currency:'EUR', status:'signed', startDate:'2026-03-15', signedAt:'2026-03-20' },
+  { id:'p6', number:18, code:'RMK18', title:'Сервисный договор №18', counterparty:'GlobalTrade Ltd',
+    managers:['ivanov','petrov'], lawyer:'lawyer', senior:'senior', amount:350000, currency:'CNY', status:'active', startDate:'2026-05-10', signedAt:'2026-05-14' },
+  { id:'p7', number:5, code:'RMK5', title:'Договор поставки №5', counterparty:'ООО «Ромашка»',
+    managers:['petrov'], lawyer:'lawyer', senior:'senior', amount:750000, currency:'RUB', status:'active', startDate:'2026-02-01', signedAt:'2026-02-05' },
+];
+const DOCUMENTS = [
+  { id:'d1', projectId:'p1', code:'OSN',   kind:'Основной договор', title:'Основной договор', currentVersion:3 },
+  { id:'d2', projectId:'p1', code:'PRIL1', kind:'Приложение',       title:'Приложение №1 (спецификация)', currentVersion:1 },
+  { id:'d3', projectId:'p1', code:'DS1',   kind:'Допсоглашение',    title:'Допсоглашение №1', currentVersion:2 },
+  { id:'d4', projectId:'p2', code:'OSN',   kind:'Основной договор', title:'Основной договор', currentVersion:2 },
+];
+const VERSIONS = [
+  { id:'v3', docId:'d1', number:3, code:'RMK12.OSN.v3', date:'2026-06-09', source:'uploaded', hash:'a1f3…9e' },
+  { id:'v2', docId:'d1', number:2, code:'RMK12.OSN.v2', date:'2026-06-05', source:'uploaded', hash:'77c0…b2' },
+  { id:'v1', docId:'d1', number:1, code:'RMK12.OSN.v1', date:'2026-05-28', source:'uploaded', hash:'12ab…04' },
+];
+// tier: self | responsible | blocker
+const EDITS_INIT = [
+  { id:'e1', docId:'d1', date:'2026-06-09', clause:'п. 5.2 Срок оплаты', type:'commercial', tier:'responsible',
+    before:'Оплата в течение 10 (десяти) рабочих дней с даты поставки.',
+    after:'Оплата в течение 30 (тридцати) календарных дней с даты поставки.',
+    author:'assist', responsible:'ivanov', argument:'Заказчик просит отсрочку; согласовано на встрече 08.06 с гендиром.',
+    privateNote:'Риск кассового разрыва — заложить пеню в п. 7.1.', deadline:'2026-06-10',
+    bitrix:'…/4821', proof:'скрин_0609.png', status:'accepted', approver:'ceo', appliedIn:null },
+  { id:'e2', docId:'d1', date:'2026-06-09', clause:'п. 7.1 Неустойка', type:'commercial', tier:'blocker',
+    before:'Неустойка 0,1% от суммы за каждый день просрочки.',
+    after:'Неустойка 0,05% от суммы за каждый день просрочки.',
+    author:'assist', responsible:'petrov', argument:'Контрагент просит снизить ставку неустойки вдвое.',
+    privateNote:'', deadline:'2026-06-11', bitrix:'…/4822', proof:null, status:'in_review', approver:null, appliedIn:null },
+  { id:'e7', docId:'d1', date:'2026-06-09', clause:'п. 7.1 Неустойка', type:'commercial', tier:'blocker',
+    before:'Неустойка 0,1% от суммы за каждый день просрочки.',
+    after:'Неустойка 0,2% от суммы за каждый день просрочки (ужесточить).',
+    author:'assist', responsible:'senior', argument:'Ст. юрист, наоборот, предлагает усилить неустойку для защиты. Конфликт с правкой Петрова.',
+    privateNote:'', deadline:'2026-06-11', bitrix:'…/4824', proof:null, status:'in_review', approver:null, appliedIn:null },
+  { id:'e6', docId:'d1', date:'2026-06-09', clause:'п. 3.4 Порядок приёмки', type:'legal_wording', tier:'responsible',
+    before:'Приёмка в течение 5 дней.',
+    after:'Приёмка в течение 10 рабочих дней с подписанием акта.',
+    author:'assist', responsible:'buh', argument:'Бухгалтерия просит синхронизировать с регламентом приёмки.',
+    privateNote:'', deadline:'2026-06-12', bitrix:'…/4823', proof:null, status:'in_review', approver:null, appliedIn:null },
+  { id:'e3', docId:'d1', date:'2026-06-05', clause:'п. 2.3 Предмет', type:'legal_wording', tier:'self',
+    before:'Поставщик обязуется поставить оборудование согласно заявке.',
+    after:'Поставщик обязуется поставить оборудование согласно Спецификации (Приложение №1).',
+    author:'assist', responsible:'assist', argument:'Уточнение формулировки, привязка к спецификации. Низкий риск.',
+    privateNote:'', deadline:'2026-06-06', bitrix:'…/4790', proof:'скрин_0605.png', status:'applied', approver:'senior', appliedIn:2 },
+  { id:'e4', docId:'d1', date:'2026-06-05', clause:'п. 9.1 Реквизиты', type:'requisites', tier:'self',
+    before:'р/с 4070… (старый банк)',
+    after:'р/с 4070… (новый банк, с 01.06)',
+    author:'assist', responsible:'buh', argument:'Сменили обслуживающий банк, обновить реквизиты.',
+    privateNote:'', deadline:'2026-06-07', bitrix:'…/4791', proof:null, status:'rejected', approver:'senior', appliedIn:null },
+  { id:'e5', docId:'d1', date:'2026-05-28', clause:'п. 4.1 Гарантийный срок', type:'commercial', tier:'responsible',
+    before:'Гарантийный срок — 12 месяцев.',
+    after:'Гарантийный срок — 24 месяца.',
+    author:'assist', responsible:'ivanov', argument:'Менеджер предложил увеличить гарантию. Ждём подтверждения — он в отпуске.',
+    privateNote:'', deadline:'2026-05-30', bitrix:'…/4701', proof:null, status:'in_review', approver:null, appliedIn:null },
+];
+
+/* ───────── СПРАВОЧНИКИ ───────── */
+const ST = {
+  draft:    {label:'Черновик',        dot:'bg-zinc-300'},
+  in_review:{label:'На рассмотрении', dot:'bg-amber-500'},
+  accepted: {label:'Принято',         dot:'bg-emerald-500'},
+  rework:   {label:'На доработку',    dot:'bg-amber-500'},
+  rejected: {label:'Отклонено',       dot:'bg-red-500'},
+  applied:  {label:'Внесено',         dot:'bg-emerald-600'},
+};
+const PROJ = {
+  draft:{label:'Черновик',dot:'bg-zinc-300'}, negotiation:{label:'Согласование',dot:'bg-amber-500'},
+  signed:{label:'Подписан',dot:'bg-zinc-400'}, active:{label:'Действует',dot:'bg-emerald-500'},
+  dispute:{label:'Спор',dot:'bg-red-500'}, terminated:{label:'Расторгнут',dot:'bg-zinc-300'}, archived:{label:'Архив',dot:'bg-zinc-200'},
+};
+const TIER = {
+  self:       {label:'Можно самим',       dot:'bg-zinc-300',  hint:'Низкий риск — ПЮ может прогнать через нейросеть, оформить ЗРС и принять сам.'},
+  responsible:{label:'Решает ответственный', dot:'bg-zinc-500', hint:'Обычный ЗРС — решение за назначенным ответственным.'},
+  blocker:    {label:'Блокер · командой', dot:'bg-red-500',   hint:'Вне нашей компетенции. Юрист НЕ принимает один — эскалация и защита командой.'},
+};
+const TYPE = { commercial:'Коммерческие', legal_wording:'Формулировки', requisites:'Реквизиты', deadlines:'Сроки', other:'Прочее' };
+
+const CUR = {
+  RUB:{sym:'₽', step:50000, rate:1}, USD:{sym:'$', step:5000, rate:90},
+  EUR:{sym:'€', step:5000, rate:100}, CNY:{sym:'¥', step:30000, rate:12.5},
+};
+const money = (a,c='RUB') => a!=null ? a.toLocaleString('ru-RU')+' '+CUR[c].sym : '—';
+const toRub = p => (p.amount||0)*CUR[p.currency||'RUB'].rate;
+const dmy = s => s ? s.split('-').reverse().join('.') : '—';
+const OPEN_ST = ['draft','in_review','rework'];
+const isOpenEdit = e => OPEN_ST.includes(e.status);
+const isOverdue = e => e.deadline && e.deadline < '2026-06-11' && isOpenEdit(e);
+function dayStatus(es){
+  const open = es.filter(isOpenEdit);
+  if (open.length===0) return {label:'Закрыта', dot:'bg-emerald-500'};
+  if (open.some(isOverdue)) return {label:'Просрочка · '+open.length, dot:'bg-red-500'};
+  return {label:'Открыто '+open.length, dot:'bg-amber-500'};
+}
+function projHealth(pid){
+  const ids = DOCUMENTS.filter(d=>d.projectId===pid).map(d=>d.id);
+  const es = EDITS_INIT.filter(e=>ids.includes(e.docId));
+  return { blockers: es.filter(e=>e.tier==='blocker' && isOpenEdit(e)).length,
+           overdue: es.filter(isOverdue).length, open: es.filter(isOpenEdit).length };
+}
+const Meta = ({m}) => <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600 whitespace-nowrap"><Dot c={m.dot}/>{m.label}</span>;
+
+/* ───────── РЕЕСТР ───────── */
+function Registry({go}) {
+  const [q,setQ]=useState(''); const [status,setStatus]=useState(''); const [mgr,setMgr]=useState('');
+  const [cur,setCur]=useState('RUB'); const [amt,setAmt]=useState(''); const [sort,setSort]=useState('num');
+  const [onlyB,setOnlyB]=useState(false); const [onlyO,setOnlyO]=useState(false);
+  const input="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10";
+  const mgrs=[...new Set(PROJECTS.flatMap(p=>p.managers))];
+  const step=CUR[cur].step;
+  let rows=PROJECTS.filter(p=>{
+    if(q && !(p.title+p.counterparty+p.code+' №'+p.number).toLowerCase().includes(q.toLowerCase())) return false;
+    if(status && p.status!==status) return false;
+    if(mgr && !p.managers.includes(mgr)) return false;
+    if(amt){ if(p.currency!==cur) return false; const n=+amt; if(p.amount<n-step||p.amount>n+step) return false; }
+    const h=projHealth(p.id);
+    if(onlyB && h.blockers===0) return false;
+    if(onlyO && h.overdue===0) return false;
+    return true;
+  });
+  const eff = amt ? 'amount_desc' : sort;
+  rows=[...rows].sort((a,b)=> eff==='num'?a.number-b.number : eff==='amount_asc'?toRub(a)-toRub(b):toRub(b)-toRub(a));
+  const total=rows.reduce((s,p)=>s+toRub(p),0);
+  const active=[q,status,mgr,amt,onlyB,onlyO].some(Boolean);
+  const reset=()=>{setQ('');setStatus('');setMgr('');setAmt('');setOnlyB(false);setOnlyO(false);};
+  const col="grid grid-cols-[36px_1fr_112px_84px_120px_152px] gap-3";
+  const tgl=(on)=>"h-9 px-3 rounded-md border text-sm "+(on?'border-zinc-900 bg-zinc-900 text-white':'border-zinc-200 text-zinc-600 hover:bg-zinc-50');
+  return (
+    <div>
+      <h1 className="text-xl font-semibold tracking-tight">Реестр договоров</h1>
+      <p className="text-sm text-zinc-500 mt-0.5 mb-4">Поиск, фильтры и сортировка по портфелю договоров</p>
+      <div className="space-y-2 mb-3">
+        <div className="flex gap-2">
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Поиск по названию, №, реквизитам…" className={input+" flex-1"} />
+          <select value={sort} onChange={e=>setSort(e.target.value)} disabled={!!amt} className={input+(amt?' opacity-50':'')} title={amt?'при фильтре по сумме — по убыванию':''}>
+            <option value="num">По порядку (№)</option><option value="amount_desc">Дороже</option><option value="amount_asc">Дешевле</option>
+          </select>
+        </div>
+        <div className="flex flex-wrap gap-2 items-start">
+          <div>
+            <div className="flex gap-2">
+              <input value={amt} onChange={e=>setAmt(e.target.value.replace(/[^0-9]/g,''))} placeholder="Сумма" className={input+" w-24"} />
+              <select value={cur} onChange={e=>setCur(e.target.value)} className={input+" w-24"}>
+                {Object.keys(CUR).map(k=><option key={k} value={k}>{CUR[k].sym} {k}</option>)}
+              </select>
+            </div>
+            {amt && <div className="text-[11px] text-zinc-400 mt-1">{money(Math.max(0,+amt-step),cur)} – {money(+amt+step,cur)} · по убыванию</div>}
+          </div>
+          <select value={mgr} onChange={e=>setMgr(e.target.value)} className={input}><option value="">Все менеджеры</option>{mgrs.map(m=><option key={m} value={m}>{U(m)}</option>)}</select>
+          <select value={status} onChange={e=>setStatus(e.target.value)} className={input}><option value="">Все статусы</option>{Object.entries(PROJ).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
+          <button onClick={()=>setOnlyB(v=>!v)} className={tgl(onlyB)}>Блокеры</button>
+          <button onClick={()=>setOnlyO(v=>!v)} className={tgl(onlyO)}>Просрочка</button>
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-xs text-zinc-500 mb-2">
+        <div>Найдено: <b className="text-zinc-700">{rows.length}</b> · портфель ~{Math.round(total).toLocaleString('ru-RU')} ₽</div>
+        {active && <button onClick={reset} className="hover:text-zinc-800 underline">Сбросить фильтры</button>}
+      </div>
+      <div className="rounded-lg border border-zinc-200 overflow-hidden">
+        <div className={col+" px-4 py-2.5 bg-zinc-50 border-b border-zinc-200 text-[11px] uppercase tracking-wide text-zinc-500"}>
+          <div>№</div><div>Договор</div><div>Менеджеры</div><div>Начало</div><div className="text-right">Сумма</div><div>Статус</div>
+        </div>
+        {rows.length===0 && <div className="px-4 py-10 text-center text-sm text-zinc-400">Ничего не найдено.</div>}
+        {rows.map(p=>{const h=projHealth(p.id);return(
+          <div key={p.id} onClick={()=>go({view:'project',projectId:p.id})}
+            className={col+" px-4 py-3 items-center border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer text-sm"}>
+            <div className="text-zinc-400 tabular-nums">{p.number}</div>
+            <div className="min-w-0"><div className="font-medium truncate">{p.title}</div><div className="text-[11px] text-zinc-400 truncate"><span className="mono">{p.code}</span> · {p.counterparty}</div></div>
+            <div className="text-zinc-600 truncate">{p.managers.map(U).join(', ')}</div>
+            <div className="text-zinc-500 text-xs tabular-nums">{dmy(p.startDate)}</div>
+            <div className="text-right tabular-nums text-zinc-700">{money(p.amount,p.currency)}</div>
+            <div className="flex items-center gap-2 min-w-0"><Meta m={PROJ[p.status]} />
+              {h.blockers>0 && <span className="inline-flex items-center gap-0.5 text-[11px] text-red-600" title="блокеры"><Ico name="alert" className="w-3 h-3"/>{h.blockers}</span>}
+              {h.overdue>0 && <span className="inline-flex items-center gap-1 text-[11px] text-red-600" title="просрочка"><Dot c="bg-red-500"/>{h.overdue}</span>}
+            </div>
+          </div>
+        );})}
+      </div>
+    </div>
+  );
+}
+
+/* ───────── СТРАНИЦА ПРОЕКТА ───────── */
+function ProjectPage({projectId, go}) {
+  const p = PROJECTS.find(x=>x.id===projectId);
+  const docs = DOCUMENTS.filter(d=>d.projectId===projectId);
+  const cnt = id => EDITS_INIT.filter(e=>e.docId===id).length;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <div><h1 className="text-xl font-semibold tracking-tight">{p.title}</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">{p.counterparty} · <span className="mono">{p.code}</span></p></div>
+        <Meta m={PROJ[p.status]} />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {[['Сумма сделки',money(p.amount,p.currency)],['Юрист',U(p.lawyer)],['Ст. юрист',U(p.senior)],['Дата начала',dmy(p.startDate)]]
+          .map(([k,v])=><div key={k} className="rounded-lg border border-zinc-200 p-3"><div className="text-[11px] uppercase tracking-wide text-zinc-400">{k}</div><div className="text-sm font-medium mt-1">{v}</div></div>)}
+      </div>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-sm font-medium text-zinc-700">Документы пакета</h2>
+        <button className="h-8 px-3 rounded-md border border-zinc-200 text-sm text-zinc-700 hover:bg-zinc-50">+ Документ</button>
+      </div>
+      {docs.length===0
+        ? <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-400">Документов пока нет.</div>
+        : <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            {docs.map(d=>(
+              <div key={d.id} onClick={()=>go({view:'document',documentId:d.id})}
+                className="grid grid-cols-[1fr_150px_90px_20px] gap-4 px-4 py-3 items-center border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer text-sm">
+                <div className="min-w-0"><span className="font-medium">{d.title}</span><span className="text-xs text-zinc-400 ml-2">{d.kind}</span></div>
+                <div className="mono text-[11px] text-zinc-400">{p.code}.{d.code}.v{d.currentVersion}</div>
+                <div className="text-zinc-500 text-xs">{cnt(d.id)} правок</div>
+                <div className="text-zinc-300"><Ico name="chevronR"/></div>
+              </div>
+            ))}
+          </div>}
+    </div>
+  );
+}
+
+/* ───────── ТАЙМЛАЙН ───────── */
+function DocumentTimeline({documentId, edits, go, openZRS}) {
+  const d = DOCUMENTS.find(x=>x.id===documentId);
+  const p = PROJECTS.find(x=>x.id===d.projectId);
+  const myEdits = edits.filter(e=>e.docId===documentId);
+  const myVers  = VERSIONS.filter(v=>v.docId===documentId);
+  const dates = [...new Set([...myEdits.map(e=>e.date), ...myVers.map(v=>v.date)])].sort().reverse();
+  const [exp, setExp] = useState(()=> new Set(dates.slice(0,1)));
+  const toggle = dt => setExp(s=>{const n=new Set(s); n.has(dt)?n.delete(dt):n.add(dt); return n;});
+  const openByClause = {};
+  myEdits.filter(isOpenEdit).forEach(e=>{(openByClause[e.clause]=openByClause[e.clause]||[]).push(e.id);});
+  const conflict = new Set(Object.keys(openByClause).filter(k=>openByClause[k].length>1));
+  if (myEdits.length===0 && myVers.length===0)
+    return <div><h1 className="text-xl font-semibold tracking-tight mb-4">{d.title}</h1><div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-400">Правок пока нет.</div></div>;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div><h1 className="text-xl font-semibold tracking-tight">{d.title}</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">{p.title} · история правок</p></div>
+        <button className="h-8 px-3 rounded-md border border-zinc-200 text-sm text-zinc-700 hover:bg-zinc-50 inline-flex items-center gap-1.5"><Ico name="upload" className="w-3.5 h-3.5"/>Версия</button>
+      </div>
+      {conflict.size>0 && <div className="flex items-center gap-2 text-xs text-zinc-600 mb-3"><Ico name="alert" className="w-3.5 h-3.5 text-amber-500"/>Конфликт: на «{[...conflict].join('», «')}» открыто несколько правок — выбрать формулировку.</div>}
+      <div className="space-y-2">
+        {dates.map(date=>{
+          const de = myEdits.filter(e=>e.date===date);
+          const ver = myVers.find(v=>v.date===date);
+          const ds = dayStatus(de);
+          const open = exp.has(date);
+          return (
+            <div key={date} className="rounded-lg border border-zinc-200 overflow-hidden">
+              <div onClick={()=>toggle(date)} className="grid grid-cols-[18px_96px_170px_1fr_auto] gap-3 items-center px-4 py-3 cursor-pointer hover:bg-zinc-50 select-none">
+                <span className="text-zinc-400"><Ico name={open?'chevronD':'chevronR'}/></span>
+                <span className="text-sm font-medium text-zinc-800">{dmy(date)}</span>
+                <Meta m={ds} />
+                <span className="text-xs text-zinc-400">{de.length} правок</span>
+                {ver && <span className="mono text-[11px] text-zinc-400 justify-self-end">{ver.code}</span>}
+              </div>
+              {open && <div className="border-t border-zinc-100">
+                {de.map(e=>{
+                  const conf = conflict.has(e.clause) && isOpenEdit(e);
+                  return (
+                  <div key={e.id} onClick={()=>openZRS(e.id)}
+                    className="grid grid-cols-[1fr_200px_160px] gap-4 px-4 py-3 items-center border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium flex items-center gap-1.5">{e.clause}{conf && <Ico name="alert" className="w-3.5 h-3.5 text-amber-500" />}</div>
+                      <div className="text-xs text-zinc-400 mt-0.5 truncate">{TYPE[e.type]} · {U(e.responsible)}{isOverdue(e)?' · просрочен':''}</div>
+                    </div>
+                    <Meta m={TIER[e.tier]} />
+                    <Meta m={ST[e.status]} />
+                  </div>
+                  );
+                })}
+              </div>}
+            </div>
+          );
+        })}
+        <div className="text-xs text-zinc-400 px-1 pt-1">06.06–08.06 — без правок, пропущены</div>
+      </div>
+    </div>
+  );
+}
+
+/* ───────── КАРТОЧКА-ЗРС ───────── */
+function ZRSModal({edit, onClose, onDecide}) {
+  if (!edit) return null;
+  const t = TIER[edit.tier]; const blocker = edit.tier==='blocker';
+  const btn = "flex-1 h-9 rounded-md text-sm font-medium inline-flex items-center justify-center gap-1.5";
+  return (
+    <div className="fixed inset-0 bg-zinc-900/30 flex items-start justify-center p-4 overflow-auto z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl border border-zinc-200 shadow-lg max-w-2xl w-full my-8" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-start justify-between px-5 py-4 border-b border-zinc-100">
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-zinc-400">ЗРС · законченная работа сотрудника</div>
+            <div className="font-semibold text-base mt-0.5">{edit.clause}</div>
+            <div className="flex items-center gap-3 mt-1.5"><Meta m={ST[edit.status]} /><span className="text-zinc-200">·</span><Meta m={t} /></div>
+          </div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 p-1"><Ico name="x"/></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-px rounded-lg overflow-hidden border border-zinc-200 bg-zinc-200 text-sm">
+            <div className="bg-white p-3"><div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Было</div><div className="text-zinc-700">{edit.before||<span className="italic text-zinc-300">новый пункт</span>}</div></div>
+            <div className="bg-white p-3"><div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Стало</div><div className="text-zinc-900">{edit.after}</div></div>
+          </div>
+          <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+            {[['Тип',TYPE[edit.type]],['Ответственный',U(edit.responsible)],['Автор',U(edit.author)],['Дедлайн',dmy(edit.deadline)]]
+              .map(([k,v])=><div key={k}><div className="text-[11px] uppercase tracking-wide text-zinc-400">{k}</div><div className={'font-medium '+(k==='Дедлайн'&&isOverdue(edit)?'text-red-600':'')}>{v}</div></div>)}
+          </div>
+          <div><div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Аргументация</div><div className="text-sm bg-zinc-50 rounded-md p-3 text-zinc-700">{edit.argument}</div></div>
+          {edit.privateNote && <div><div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Приватная заметка юриста</div><div className="text-sm bg-zinc-50 rounded-md p-3 text-zinc-700">{edit.privateNote}</div></div>}
+          <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
+            {edit.bitrix && <span className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1"><Ico name="ext" className="w-3 h-3"/>Битрикс</span>}
+            {edit.proof && <span className="rounded-md border border-zinc-200 px-2 py-1">{edit.proof}</span>}
+            {edit.appliedIn && <span className="rounded-md border border-zinc-200 px-2 py-1">в версии v{edit.appliedIn}</span>}
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-zinc-100 bg-zinc-50/60 rounded-b-xl">
+          {blocker
+            ? <div>
+                <div className="flex items-start gap-2 text-xs text-zinc-600 mb-3"><Ico name="alert" className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0"/><span>{t.hint}</span></div>
+                <div className="flex gap-2">
+                  <button className={btn+" bg-zinc-900 text-white hover:bg-zinc-800"}>Эскалировать команде</button>
+                  <button onClick={()=>onDecide(edit.id,'rework')} className={btn+" border border-zinc-200 text-zinc-700 hover:bg-white"}>На доработку</button>
+                </div>
+              </div>
+            : <div>
+                <div className="text-xs text-zinc-500 mb-2">{t.hint}</div>
+                <div className="flex gap-2">
+                  <button onClick={()=>onDecide(edit.id,'accepted')} className={btn+" bg-zinc-900 text-white hover:bg-zinc-800"}>Принято</button>
+                  <button onClick={()=>onDecide(edit.id,'rework')} className={btn+" border border-zinc-200 text-zinc-700 hover:bg-white"}>На доработку</button>
+                  <button onClick={()=>onDecide(edit.id,'rejected')} className={btn+" border border-zinc-200 text-red-600 hover:bg-white"}>Отклонено</button>
+                </div>
+              </div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───────── ДЕМО: КАК ВИДИТ CLAUDE ───────── */
+function AgentDemo({edits}) {
+  const d = DOCUMENTS.find(x=>x.id==='d1');
+  const my = edits.filter(e=>e.docId==='d1');
+  const openZrs = my.filter(e=>e.status==='in_review');
+  const cand = my.filter(e=>e.status==='accepted' && !e.appliedIn);
+  const over = my.filter(isOverdue);
+  const blockers = my.filter(e=>e.tier==='blocker' && isOpenEdit(e));
+  const [code,setCode] = useState('RMK12.OSN.v3');
+  const r = VERSIONS.find(v=>v.code===code);
+  const Card = ({title,sub,children}) => <div className="rounded-lg border border-zinc-200 mb-3">
+    <div className="px-4 py-2.5 border-b border-zinc-100 bg-zinc-50"><div className="mono text-xs text-zinc-700">{title}</div><div className="text-[11px] text-zinc-400 mt-0.5">{sub}</div></div>
+    <div className="p-4 text-sm">{children}</div></div>;
+  const Row = ({k,v}) => <div className="flex justify-between py-0.5"><span className="text-zinc-500">{k}</span><span className="font-medium text-zinc-800">{v}</span></div>;
+  return (
+    <div>
+      <h1 className="text-xl font-semibold tracking-tight">Как видит Claude</h1>
+      <p className="text-sm text-zinc-500 mt-0.5 mb-5">Демо agent-слоя: то же приложение через «кнопки» (MCP) — ответы на вопросы, а не сырые таблицы.</p>
+      <Card title="get_state(«Основной договор»)" sub="На чём остановились">
+        <Row k="Актуальная версия" v={'v3 · RMK12.OSN.v3'} />
+        <Row k="На рассмотрении" v={openZrs.length} />
+        <Row k="Принято, не внесено (в v4)" v={cand.length||'—'} />
+        <Row k="Просрочено" v={over.length} />
+        <Row k="Блокеры (решает команда)" v={blockers.length} />
+      </Card>
+      <Card title="resolve_document({revisionCode})" sub="Опознай присланный файл">
+        <input value={code} onChange={e=>setCode(e.target.value)} className="mono text-sm border border-zinc-200 rounded-md px-3 h-9 w-full mb-3 focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
+        {r ? <div className="text-zinc-700">Опознано: <b>{d.title}</b>, версия v{r.number} от {dmy(r.date)} · источник: {r.source==='uploaded'?'загружен человеком':'сгенерирован Claude'} · хеш <span className="mono text-zinc-500">{r.hash}</span>.</div>
+           : <div className="text-zinc-500 inline-flex items-center gap-1.5"><Ico name="alert" className="w-3.5 h-3.5 text-amber-500"/>Код не найден — проверю по footer'у/хешу или это неучтённый черновик.</div>}
+      </Card>
+      <Card title="prepare_next_version(«Основной договор»)" sub="Подготовь черновик v4">
+        <div className="text-zinc-700">Беру v3 + принятые-не-внесённые правки ({cand.length}). На доработку/отклонённые — не вношу. Черновик помечается <span className="mono text-zinc-500">ai_generated</span> и <b>официальной версией становится только после подтверждения человеком</b>.</div>
+      </Card>
+    </div>
+  );
+}
+
+/* ───────── APP ───────── */
+function App() {
+  const [route,setRoute] = useState({view:'registry'});
+  const [edits,setEdits] = useState(EDITS_INIT);
+  const [zrsId,setZrsId] = useState(null);
+  const [toast,setToast] = useState(null);
+  const go = r => { setRoute(r); window.scrollTo(0,0); };
+  const decide = (id,status) => {
+    setEdits(es=>es.map(e=>e.id===id?{...e,status, approver: status==='accepted'?'ceo':e.approver}:e));
+    setZrsId(null); setToast('Статус: '+ST[status].label+' · доказательство приложено');
+    setTimeout(()=>setToast(null),3000);
+  };
+  const zrsEdit = edits.find(e=>e.id===zrsId);
+  const crumbs = [{label:'Реестр',r:{view:'registry'}}];
+  if (route.view==='project'){const p=PROJECTS.find(x=>x.id===route.projectId);crumbs.push({label:p.title});}
+  if (route.view==='document'){const dd=DOCUMENTS.find(x=>x.id===route.documentId);const pp=PROJECTS.find(x=>x.id===dd.projectId);crumbs.push({label:pp.title,r:{view:'project',projectId:pp.id}},{label:dd.title});}
+  const nav = route.view==='agent' ? [{label:'Как видит Claude'}] : crumbs;
+  const NavItem = ({icon,label,active,onClick}) =>
+    <button onClick={onClick} className={'w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-2 '+(active?'bg-white text-zinc-900 font-medium border border-zinc-200 shadow-sm':'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 border border-transparent')}><Ico name={icon} className="w-4 h-4"/>{label}</button>;
+  return (
+    <div className="flex min-h-screen">
+      <aside className="w-56 border-r border-zinc-200 bg-zinc-50/60 p-3 flex flex-col gap-0.5 shrink-0">
+        <div className="px-3 py-2.5 mb-1"><div className="font-semibold tracking-tight">LawyerApp</div><div className="text-[11px] text-zinc-400">прототип</div></div>
+        <NavItem icon="list" label="Реестр" active={['registry','project','document'].includes(route.view)} onClick={()=>go({view:'registry'})} />
+        <NavItem icon="bot" label="Как видит Claude" active={route.view==='agent'} onClick={()=>go({view:'agent'})} />
+      </aside>
+      <main className="flex-1 px-8 py-7 max-w-5xl">
+        <nav className="text-sm text-zinc-400 mb-5 flex items-center gap-2">
+          {nav.map((c,i)=><span key={i} className="flex items-center gap-2">{i>0 && <span className="text-zinc-300">/</span>}
+            {c.r?<button className="hover:text-zinc-700" onClick={()=>go(c.r)}>{c.label}</button>:<span className="text-zinc-700">{c.label}</span>}</span>)}
+        </nav>
+        {route.view==='registry' && <Registry go={go} />}
+        {route.view==='project' && <ProjectPage projectId={route.projectId} go={go} />}
+        {route.view==='document' && <DocumentTimeline documentId={route.documentId} edits={edits} go={go} openZRS={setZrsId} />}
+        {route.view==='agent' && <AgentDemo edits={edits} />}
+      </main>
+      <ZRSModal edit={zrsEdit} onClose={()=>setZrsId(null)} onDecide={decide} />
+      {toast && <div className="fixed bottom-5 right-5 bg-zinc-900 text-white text-sm rounded-md px-4 py-2.5 shadow-lg z-50">{toast}</div>}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

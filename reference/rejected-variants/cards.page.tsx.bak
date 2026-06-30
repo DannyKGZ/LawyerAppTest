@@ -1,0 +1,9 @@
+"use client";
+
+import { useParams } from "next/navigation";
+import { TimelineCardsView } from "@/components/timeline-cards-view";
+
+export default function Page() {
+  const { id } = useParams<{ id: string }>();
+  return <TimelineCardsView id={id} />;
+}

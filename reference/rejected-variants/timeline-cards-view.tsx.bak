@@ -1,0 +1,137 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronRight, AlertTriangle, ArrowLeft, ExternalLink, Paperclip } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { DOCUMENTS, PROJECTS, VERSIONS, EDITS } from "@/lib/fixtures";
+import { ST, TIER, TYPE, dmy, dayStatus, isOpenEdit, isOverdue } from "@/lib/domain";
+import { Meta } from "@/components/ui-bits";
+import {
+  ProtectionStrip, ViewSwitcher, DiffInline, Attribution, TIER_ACCENT, pravkaWord,
+} from "@/components/timeline-shared";
+
+export function TimelineCardsView({ id }: { id: string }) {
+  const router = useRouter();
+  const doc = DOCUMENTS.find((x) => x.id === id);
+  const edits = EDITS.filter((e) => e.docId === id);
+  const vers = VERSIONS.filter((v) => v.docId === id);
+  const dates = [...new Set([...edits.map((e) => e.date), ...vers.map((v) => v.date)])].sort().reverse();
+  const [exp, setExp] = useState<Set<string>>(() => new Set(dates.slice(0, 1)));
+  const [openCard, setOpenCard] = useState<string | null>(null);
+
+  if (!doc) return <div className="text-sm text-muted-foreground">Документ не найден.</div>;
+  const proj = PROJECTS.find((p) => p.id === doc.projectId)!;
+
+  // конфликт: 2+ открытых правки на один пункт
+  const openByClause: Record<string, number> = {};
+  edits.filter(isOpenEdit).forEach((e) => { openByClause[e.clause] = (openByClause[e.clause] || 0) + 1; });
+  const conflict = new Set(Object.keys(openByClause).filter((k) => openByClause[k] > 1));
+
+  const toggleDay = (d: string) =>
+    setExp((s) => { const n = new Set(s); if (n.has(d)) n.delete(d); else n.add(d); return n; });
+
+  return (
+    <div>
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">{doc.title}</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">{proj.title} · история правок</p>
+        </div>
+        <button onClick={() => router.push(`/projects/${proj.id}`)} className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-accent">
+          <ArrowLeft className="size-4" />
+          Назад
+        </button>
+      </div>
+
+      <ViewSwitcher docId={id} />
+      <ProtectionStrip edits={edits} />
+
+      <div className="space-y-2">
+        {dates.map((date) => {
+          const de = edits.filter((e) => e.date === date);
+          const ver = vers.find((v) => v.date === date);
+          const ds = dayStatus(de);
+          const open = exp.has(date);
+          return (
+            <div key={date} className="overflow-hidden rounded-lg border">
+              <div onClick={() => toggleDay(date)} className="flex cursor-pointer select-none items-center gap-3 px-4 py-3 hover:bg-muted/50">
+                <span className="text-muted-foreground">{open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}</span>
+                <span className="w-24 text-sm font-medium">{dmy(date)}</span>
+                <div className="w-44"><Meta m={ds} /></div>
+                <div className="ml-auto flex items-center gap-6 text-xs text-muted-foreground">
+                  <span>{de.length} {pravkaWord(de.length)}</span>
+                  {ver && <span className="font-mono">{ver.code}</span>}
+                </div>
+              </div>
+
+              {open && (
+                <div className="space-y-2.5 border-t bg-muted/20 p-3">
+                  {de.map((e) => {
+                    const conf = conflict.has(e.clause) && isOpenEdit(e);
+                    const acc = TIER_ACCENT[e.tier];
+                    const cardOpen = openCard === e.id;
+                    return (
+                      <div key={e.id} className={cn("rounded-lg border border-l-4 bg-background", acc.bar)}>
+                        <div onClick={() => setOpenCard(cardOpen ? null : e.id)} className="cursor-pointer p-3.5">
+                          <div className="mb-2 flex items-center gap-2">
+                            <span className="text-sm font-semibold text-foreground">{e.clause}</span>
+                            {conf && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                                <AlertTriangle className="size-3" /> конфликт
+                              </span>
+                            )}
+                            <span className="ml-auto flex items-center gap-3">
+                              <Meta m={TIER[e.tier]} className={acc.text} />
+                              <Meta m={ST[e.status]} />
+                            </span>
+                          </div>
+
+                          <DiffInline before={e.before} after={e.after} />
+
+                          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2.5">
+                            <Attribution edit={e} />
+                            <span className="text-xs text-muted-foreground">· {TYPE[e.type]}</span>
+                            <span className={cn("text-xs", isOverdue(e) ? "font-medium text-red-600" : "text-muted-foreground")}>
+                              · дедлайн {dmy(e.deadline)}{isOverdue(e) ? " · просрочен" : ""}
+                            </span>
+                            <span className="ml-auto text-xs text-muted-foreground">{cardOpen ? "свернуть" : "подробнее"}</span>
+                          </div>
+                        </div>
+
+                        {cardOpen && (
+                          <div className="space-y-3 border-t bg-muted/20 px-3.5 py-3 text-sm">
+                            <div>
+                              <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Аргументация</div>
+                              <div className="text-foreground/80">{e.argument}</div>
+                            </div>
+                            {e.privateNote && (
+                              <div>
+                                <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">🔒 Приватно (юрист)</div>
+                                <div className="rounded-md bg-muted p-2.5 text-foreground/80">{e.privateNote}</div>
+                              </div>
+                            )}
+                            <div className="flex items-start gap-2 rounded-md border bg-background p-2.5 text-xs text-muted-foreground">
+                              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/70" />
+                              <span>{TIER[e.tier].hint}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {e.bitrix && <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1"><ExternalLink className="size-3" />Битрикс</span>}
+                              {e.proof && <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1"><Paperclip className="size-3" />{e.proof}</span>}
+                              {e.appliedIn && <span className="rounded-md border px-2 py-1">внесено в v{e.appliedIn}</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div className="px-1 pt-1 text-xs text-muted-foreground">06.06–08.06 — без правок, пропущены</div>
+      </div>
+    </div>
+  );
+}

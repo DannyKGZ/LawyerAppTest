@@ -1,0 +1,9 @@
+"use client";
+
+import { useParams } from "next/navigation";
+import { TimelineClausesView } from "@/components/timeline-clauses-view";
+
+export default function Page() {
+  const { id } = useParams<{ id: string }>();
+  return <TimelineClausesView id={id} />;
+}

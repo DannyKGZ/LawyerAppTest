@@ -1,0 +1,139 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { AlertTriangle, Clock, ShieldAlert } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { USERS } from "@/lib/fixtures";
+import type { Edit, EditTier } from "@/lib/types";
+import { TIER, isOpenEdit, isOverdue } from "@/lib/domain";
+
+/** Короткое имя без скобочного пояснения: «Аня (помощник юриста)» → «Аня». */
+export const shortName = (id: string | null) =>
+  id && USERS[id] ? USERS[id].name.replace(/\s*\(.*\)$/, "") : "—";
+export const roleOf = (id: string | null) =>
+  (id && USERS[id] ? USERS[id].role : "").toLowerCase();
+
+export const pravkaWord = (n: number) => {
+  const a = n % 10, b = n % 100;
+  if (a === 1 && b !== 11) return "правка";
+  if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return "правки";
+  return "правок";
+};
+
+/** Цветовой акцент по уровню риска (полоса слева + точка). */
+export const TIER_ACCENT: Record<EditTier, { bar: string; dot: string; text: string }> = {
+  self: { bar: "border-l-zinc-300", dot: "bg-zinc-400", text: "text-zinc-500" },
+  responsible: { bar: "border-l-amber-400", dot: "bg-amber-500", text: "text-amber-700" },
+  blocker: { bar: "border-l-red-500", dot: "bg-red-500", text: "text-red-700" },
+};
+
+/** Инлайн «было → стало» одной строкой. */
+export function DiffInline({ before, after }: { before: string; after: string }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+      {before ? (
+        <span className="text-muted-foreground line-through decoration-red-400/60">{before}</span>
+      ) : (
+        <span className="italic text-muted-foreground">новый пункт</span>
+      )}
+      <span className="text-muted-foreground">→</span>
+      <span className="font-medium text-foreground">{after}</span>
+    </div>
+  );
+}
+
+/** «Кто настоял» — герой записи: инициатор + его роль + кто оформил. */
+export function Attribution({ edit, className }: { edit: Edit; className?: string }) {
+  const t = TIER_ACCENT[edit.tier];
+  return (
+    <div className={cn("text-sm", className)}>
+      <span className="inline-flex items-center gap-1.5">
+        <span className={cn("inline-block size-2 rounded-full", t.dot)} />
+        <span className="text-muted-foreground">Настоял:</span>
+        <span className="font-semibold text-foreground">{shortName(edit.responsibleId)}</span>
+        {roleOf(edit.responsibleId) && (
+          <span className="text-muted-foreground">({roleOf(edit.responsibleId)})</span>
+        )}
+      </span>
+      {edit.authorId && edit.authorId !== edit.responsibleId && (
+        <span className="ml-2 text-xs text-muted-foreground">· оформил(а) {shortName(edit.authorId)}</span>
+      )}
+    </div>
+  );
+}
+
+/** Верхняя плашка «защита юриста»: блокеры + просрочка. Скрыта, если нечего показывать. */
+export function ProtectionStrip({ edits }: { edits: Edit[] }) {
+  const blockers = edits.filter((e) => e.tier === "blocker" && isOpenEdit(e));
+  const overdue = edits.filter(isOverdue);
+  if (blockers.length === 0 && overdue.length === 0) return null;
+  return (
+    <div className="mb-5 overflow-hidden rounded-lg border border-red-200 bg-red-50/60">
+      <div className="flex items-center gap-2 border-b border-red-200/70 px-4 py-2.5 text-sm font-medium text-red-800">
+        <ShieldAlert className="size-4" />
+        Защита юриста
+      </div>
+      <div className="space-y-2.5 px-4 py-3 text-sm">
+        {blockers.length > 0 && (
+          <div>
+            <div className="text-red-900">
+              На вас пытаются повесить {blockers.length} {blockers.length === 1 ? "решение" : "решения"} вне вашей
+              компетенции — это блокеры, вы не решаете их в одиночку:
+            </div>
+            <ul className="mt-1.5 space-y-1">
+              {blockers.map((e) => (
+                <li key={e.id} className="flex items-center gap-2 text-red-800">
+                  <AlertTriangle className="size-3.5 shrink-0 text-red-500" />
+                  <span className="font-medium">{e.clause}</span>
+                  <span className="text-red-700/80">· настоял {shortName(e.responsibleId)}</span>
+                  <span className="ml-auto text-xs text-red-600">эскалировать команде →</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {overdue.length > 0 && (
+          <div className="flex items-center gap-2 text-amber-800">
+            <Clock className="size-3.5 shrink-0 text-amber-600" />
+            {overdue.length} {pravkaWord(overdue.length)} просрочено
+            <span className="text-amber-700/80">
+              ({overdue.map((e) => `${e.clause} — ждёт ${shortName(e.responsibleId)}`).join("; ")})
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Сегментный переключатель видов истории документа. */
+export function ViewSwitcher({ docId }: { docId: string }) {
+  const path = usePathname();
+  const items = [
+    { label: "Текущий", href: `/documents/${docId}` },
+    { label: "Карточки", href: `/documents/${docId}/cards` },
+    { label: "По пунктам", href: `/documents/${docId}/clauses` },
+  ];
+  return (
+    <div className="mb-5 inline-flex rounded-lg border bg-muted/40 p-0.5 text-sm">
+      {items.map((it) => {
+        const active = path === it.href;
+        return (
+          <Link
+            key={it.href}
+            href={it.href}
+            className={cn(
+              "rounded-md px-3 py-1.5 transition-colors",
+              active ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {it.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+export { TIER };
