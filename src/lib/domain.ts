@@ -64,6 +64,49 @@ export const TYPE: Record<EditType, string> = {
 export const OPEN_ST: EditStatus[] = ["draft", "in_review", "rework"];
 export const isOpenEdit = (e: Edit) => OPEN_ST.includes(e.status);
 export const isOverdue = (e: Edit) => !!e.deadline && e.deadline < TODAY && isOpenEdit(e);
+export const isClosedEdit = (e: Edit) => !isOpenEdit(e);
+
+/** Пункты с двумя и более открытыми правками — конфликт. */
+export function conflictClauses(edits: Edit[]): Set<string> {
+  const openByClause: Record<string, number> = {};
+  edits.filter(isOpenEdit).forEach((e) => {
+    openByClause[e.clause] = (openByClause[e.clause] || 0) + 1;
+  });
+  return new Set(Object.keys(openByClause).filter((k) => openByClause[k] > 1));
+}
+
+const urgency = (e: Edit, conflicts: Set<string>) => {
+  if (conflicts.has(e.clause) && isOpenEdit(e)) return 0;
+  if (e.tier === "blocker" && isOpenEdit(e)) return 1;
+  if (isOverdue(e)) return 2;
+  if (isOpenEdit(e)) return 3;
+  if (e.status === "accepted") return 4;
+  return 5;
+};
+
+/** Открытые и рискованные — вверх; закрытые — вниз, по дате. */
+export function sortEditsForDisplay(edits: Edit[]): Edit[] {
+  const conflicts = conflictClauses(edits);
+  return [...edits].sort((a, b) => {
+    const ua = urgency(a, conflicts);
+    const ub = urgency(b, conflicts);
+    if (ua !== ub) return ua - ub;
+    return b.date.localeCompare(a.date);
+  });
+}
+
+export function docEditStats(edits: Edit[]) {
+  const conflicts = conflictClauses(edits);
+  const open = edits.filter(isOpenEdit);
+  return {
+    open: open.length,
+    blockers: open.filter((e) => e.tier === "blocker").length,
+    overdue: edits.filter(isOverdue).length,
+    conflicts: conflicts.size,
+    acceptedPending: edits.filter((e) => e.status === "accepted" && !e.appliedIn).length,
+    closed: edits.filter(isClosedEdit).length,
+  };
+}
 
 export function dayStatus(es: Edit[]): Meta {
   const open = es.filter(isOpenEdit);
